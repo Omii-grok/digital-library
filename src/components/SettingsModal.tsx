@@ -10,6 +10,7 @@ interface SettingsModalProps {
   folders: any[];
   smartBoardMode: boolean;
   onSyncNow: () => Promise<void>;
+  onDownloadFile: (file: FileItem) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -20,6 +21,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   folders,
   smartBoardMode,
   onSyncNow,
+  onDownloadFile,
 }) => {
   const [token, setToken] = useState(config.token);
   const [owner, setOwner] = useState(config.owner);
@@ -295,16 +297,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           Folder: {file.folder} • Type: {file.type.toUpperCase()}
                         </p>
                       </div>
-                      <a
-                        href={file.file}
-                        download={file.title + (file.type === 'pdf' ? '.pdf' : '.pptx')}
+                      <button
+                        onClick={() => onDownloadFile(file)}
                         className={`font-bold border border-slate-200 text-slate-700 hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 rounded-lg flex items-center gap-1 transition-all ${
                           smartBoardMode ? 'py-3.5 px-5 text-md' : 'py-1 px-3 text-[10px]'
                         }`}
                       >
                         <Download className="w-3 h-3" />
                         Download
-                      </a>
+                      </button>
                     </div>
                   ))}
                 </div>

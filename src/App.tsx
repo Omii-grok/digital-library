@@ -16,6 +16,7 @@ import {
   commitToGithub,
   deleteFromGithub,
   fetchLibraryFromGithub,
+  getFullFileUrl,
 } from './utils/db';
 import { FolderPlus, AlertCircle } from 'lucide-react';
 
@@ -315,7 +316,7 @@ export default function App() {
         setIsSyncing(false);
       }
     } else {
-      setViewerFile(file);
+      setViewerFile({ ...file, file: getFullFileUrl(file.file) });
     }
   };
 
@@ -332,6 +333,8 @@ export default function App() {
         alert('File content not found in browser.');
         return;
       }
+    } else {
+      downloadUrl = getFullFileUrl(downloadUrl);
     }
 
     const a = document.createElement('a');
@@ -446,6 +449,7 @@ export default function App() {
           folders={folders}
           smartBoardMode={smartBoardMode}
           onSyncNow={handleManualSync}
+          onDownloadFile={handleDownloadFile}
         />
       )}
 

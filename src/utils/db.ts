@@ -274,3 +274,14 @@ export async function fetchLibraryFromGithub(config: GithubConfig): Promise<{ fo
 
   return { folders, files };
 }
+
+// Helper to resolve subdirectory paths (e.g. for GitHub Pages)
+export function getFullFileUrl(filePath: string): string {
+  if (filePath.startsWith('blob:') || filePath.startsWith('data:') || filePath.startsWith('http')) {
+    return filePath;
+  }
+  const base = import.meta.env.BASE_URL || '/'; // e.g. "/digital-library/"
+  const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+  return `${base}${cleanPath}`;
+}
+
