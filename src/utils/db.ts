@@ -167,11 +167,12 @@ export async function commitToGithub(
 
   // 1. Get SHA if the file already exists on GitHub
   try {
-    const res = await fetch(`${url}?ref=${config.branch}`, {
+    const res = await fetch(`${url}?ref=${config.branch}&_=${Date.now()}`, {
       headers: {
         Authorization: `token ${config.token}`,
         Accept: 'application/vnd.github.v3+json',
       },
+      cache: 'no-store',
     });
     if (res.ok) {
       const data = await res.json();
@@ -213,11 +214,12 @@ export async function deleteFromGithub(
   const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${cleanPath}`;
 
   // 1. Get SHA
-  const res = await fetch(`${url}?ref=${config.branch}`, {
+  const res = await fetch(`${url}?ref=${config.branch}&_=${Date.now()}`, {
     headers: {
       Authorization: `token ${config.token}`,
       Accept: 'application/vnd.github.v3+json',
     },
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -252,12 +254,13 @@ export async function deleteFromGithub(
 // Sync local DB with the actual GitHub Repository configuration files
 export async function fetchLibraryFromGithub(config: GithubConfig): Promise<{ folders: Folder[]; files: FileItem[] }> {
   const fetchFile = async (path: string) => {
-    const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}?ref=${config.branch}`;
+    const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}?ref=${config.branch}&_=${Date.now()}`;
     const res = await fetch(url, {
       headers: {
         Authorization: `token ${config.token}`,
         Accept: 'application/vnd.github.v3.raw', // Request raw content directly
       },
+      cache: 'no-store',
     });
 
     if (!res.ok) {
