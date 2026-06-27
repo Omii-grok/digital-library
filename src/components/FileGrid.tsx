@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Folder as FolderIcon, FileText, Download, Trash2, Edit3, LayoutGrid, List, FileClock, Presentation } from 'lucide-react';
+import { Folder as FolderIcon, FileText, Download, Trash2, Edit3, LayoutGrid, List, FileClock, Presentation, Video } from 'lucide-react';
 import type { Folder, FileItem } from '../types';
 
 interface FileGridProps {
@@ -106,9 +106,9 @@ export const FileGrid: React.FC<FileGridProps> = ({
               >
                 <div className="flex items-start justify-between">
                   <div className={`rounded-lg flex items-center justify-center font-bold text-white ${
-                    file.type === 'pdf' ? 'bg-rose-500' : 'bg-amber-500'
+                    file.type === 'pdf' ? 'bg-rose-500' : file.type === 'ppt' ? 'bg-amber-500' : 'bg-indigo-500'
                   } ${smartBoardMode ? 'w-12 h-12 text-sm' : 'w-9 h-9 text-[10px]'}`}>
-                    {file.type === 'pdf' ? 'PDF' : 'PPT'}
+                    {file.type === 'pdf' ? 'PDF' : file.type === 'ppt' ? 'PPT' : 'VID'}
                   </div>
                   <span className={`px-2 py-0.5 rounded bg-slate-100 text-slate-500 font-medium truncate max-w-[120px] ${
                     smartBoardMode ? 'text-xs' : 'text-[10px]'
@@ -324,9 +324,15 @@ export const FileGrid: React.FC<FileGridProps> = ({
                 <div className="flex items-start gap-3">
                   {/* File Type Icon badge */}
                   <div className={`rounded-xl text-white font-bold flex items-center justify-center flex-shrink-0 ${
-                    file.type === 'pdf' ? 'bg-rose-500' : 'bg-amber-500'
+                    file.type === 'pdf' ? 'bg-rose-500' : file.type === 'ppt' ? 'bg-amber-500' : 'bg-indigo-500'
                   } ${smartBoardMode ? 'w-14 h-14 text-md' : 'w-10 h-10 text-xs'}`}>
-                    {file.type === 'pdf' ? <FileText className={smartBoardMode ? 'w-7 h-7' : 'w-5 h-5'} /> : <Presentation className={smartBoardMode ? 'w-7 h-7' : 'w-5 h-5'} />}
+                    {file.type === 'pdf' ? (
+                      <FileText className={smartBoardMode ? 'w-7 h-7' : 'w-5 h-5'} />
+                    ) : file.type === 'ppt' ? (
+                      <Presentation className={smartBoardMode ? 'w-7 h-7' : 'w-5 h-5'} />
+                    ) : (
+                      <Video className={smartBoardMode ? 'w-7 h-7' : 'w-5 h-5'} />
+                    )}
                   </div>
 
                   <div className="overflow-hidden min-w-0">
@@ -359,7 +365,9 @@ export const FileGrid: React.FC<FileGridProps> = ({
                     className={`font-bold text-center border rounded-lg transition-all-custom ${
                       file.type === 'pdf' 
                         ? 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-500 hover:text-white' 
-                        : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-500 hover:text-white'
+                        : file.type === 'ppt'
+                        ? 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-500 hover:text-white'
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-500 hover:text-white'
                     } ${smartBoardMode ? 'py-3.5 text-md' : 'py-1.5 text-xs'}`}
                   >
                     Open View

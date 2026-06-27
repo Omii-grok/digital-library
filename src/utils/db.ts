@@ -1,6 +1,7 @@
 import foldersSeed from '../../data/folders.json';
 import filesSeed from '../../data/files.json';
-import type { Folder, FileItem, GithubConfig } from '../types';
+import type { Folder, FileItem, GithubConfig, R2Config } from '../types';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const DB_NAME = 'DigitalLibraryDB';
 const DB_VERSION = 1;
@@ -283,5 +284,38 @@ export function getFullFileUrl(filePath: string): string {
   const base = import.meta.env.BASE_URL || '/'; // e.g. "/digital-library/"
   const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
   return `${base}${cleanPath}`;
+}
+
+// Cloudflare R2 Upload Handler
+export async function uploadToR2(
+  config: R2Config,
+  file: File,
+  keyName: string
+): Promise<string> {
+  const s3 = new S3Client({
+    region: 'auto', // R2 S3 compatibility requires region 'auto'
+    endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+
+  const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
+
+  const command = new PutObjectCommand({
+    Bucket: config.bucketName,
+    Key: cleanKey,
+    Body: file,
+    ContentType: file.type,
+  });
+
+  await s3.send(command);
+
+  const domain = config.publicDomain.endsWith('/')
+    ? config.publicDomain.slice(0, -1)
+    : config.publicDomain;
+
+  return `${domain}/${cleanKey}`;
 }
 

@@ -5,7 +5,7 @@ export interface Folder {
 export interface FileItem {
   title: string;
   folder: string;
-  type: 'pdf' | 'ppt';
+  type: 'pdf' | 'ppt' | 'video';
   file: string; // URL path or ObjectURL for local files
   isLocal?: boolean;
   createdAt?: string;
@@ -17,5 +17,14 @@ export interface GithubConfig {
   owner: string;
   repo: string;
   branch: string;
+  enabled: boolean;
+}
+
+export interface R2Config {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucketName: string;
+  publicDomain: string;
   enabled: boolean;
 }

@@ -6,7 +6,7 @@ interface UploadModalProps {
   folders: Folder[];
   currentFolder: string | null;
   onClose: () => void;
-  onUpload: (title: string, folder: string, type: 'pdf' | 'ppt', file: File) => void;
+  onUpload: (title: string, folder: string, type: 'pdf' | 'ppt' | 'video', file: File) => void;
   smartBoardMode: boolean;
 }
 
@@ -49,8 +49,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       if (!title) {
         setTitle(file.name.replace(/\.[^/.]+$/, ""));
       }
+    } else if (extension === 'mp4' || extension === 'webm' || extension === 'ogg') {
+      setSelectedFile(file);
+      if (!title) {
+        setTitle(file.name.replace(/\.[^/.]+$/, ""));
+      }
     } else {
-      setError('Unsupported file type. Please upload a PDF or PPT/PPTX file.');
+      setError('Unsupported file type. Please upload a PDF, PPT/PPTX, or Video file (MP4, WebM, OGG).');
       setSelectedFile(null);
     }
   };
@@ -86,7 +91,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       return;
     }
 
-    const fileType = selectedFile.name.split('.').pop()?.toLowerCase() === 'pdf' ? 'pdf' : 'ppt';
+    const ext = selectedFile.name.split('.').pop()?.toLowerCase();
+    let fileType: 'pdf' | 'ppt' | 'video' = 'pdf';
+    if (ext === 'pdf') {
+      fileType = 'pdf';
+    } else if (ext === 'ppt' || ext === 'pptx') {
+      fileType = 'ppt';
+    } else if (ext === 'mp4' || ext === 'webm' || ext === 'ogg') {
+      fileType = 'video';
+    }
     onUpload(title.trim(), selectedFolder, fileType, selectedFile);
     onClose();
   };
@@ -138,7 +151,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.ppt,.pptx"
+              accept=".pdf,.ppt,.pptx,.mp4,.webm,.ogg"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -160,7 +173,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   Drag and drop file here, or click to browse
                 </p>
                 <p className={`text-slate-400 ${smartBoardMode ? 'text-md' : 'text-xs'}`}>
-                  Supports PDF, PPT, and PPTX up to 50MB
+                  Supports PDF, PPT, and Videos up to 500MB
                 </p>
               </div>
             )}

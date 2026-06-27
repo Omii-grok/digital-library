@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Download, ArrowLeft, ArrowRight, Monitor } from 'lucide-react';
 import type { FileItem } from '../types';
 
@@ -22,6 +22,21 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [useOfficeViewer, setUseOfficeViewer] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+
+  const handleSkip = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime += seconds;
+    }
+  };
+
+  const handleSpeedChange = (speed: number) => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = speed;
+      setPlaybackSpeed(speed);
+    }
+  };
 
   // Generate slide slides based on file name
   const mockSlides: Slide[] = [
@@ -125,7 +140,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 
           <div className="flex items-center gap-2">
             <span className={`rounded px-2 py-0.5 text-xs text-white font-bold ${
-              file.type === 'pdf' ? 'bg-rose-600' : 'bg-amber-600'
+              file.type === 'pdf' ? 'bg-rose-600' : file.type === 'ppt' ? 'bg-amber-600' : 'bg-indigo-600'
             }`}>
               {file.type.toUpperCase()}
             </span>
@@ -175,6 +190,62 @@ export const FileViewer: React.FC<FileViewerProps> = ({
             title={file.title}
             className="w-full h-full max-w-6xl bg-white rounded-xl shadow-2xl border-none"
           />
+        ) : file.type === 'video' ? (
+          /* HTML5 Video player with Smart Board touchscreen controls */
+          <div className="w-full h-full max-w-5xl flex flex-col justify-between items-center gap-4">
+            <div className="w-full flex-1 bg-slate-950 rounded-2xl overflow-hidden shadow-2xl border border-slate-800 flex items-center justify-center">
+              <video
+                ref={videoRef}
+                src={file.file}
+                controls
+                autoPlay
+                className="w-full h-full max-h-[70vh] object-contain"
+              />
+            </div>
+            
+            {/* Quick playback control toolbar */}
+            <div className="flex flex-wrap items-center justify-center gap-3 bg-slate-900 border border-slate-850 rounded-xl p-3 shadow-xl w-full max-w-3xl">
+              <button
+                onClick={() => handleSkip(-10)}
+                className={`font-bold text-white bg-slate-800 hover:bg-slate-700 active:bg-slate-650 rounded-lg transition-colors border border-slate-700 ${
+                  smartBoardMode ? 'py-3.5 px-6 text-lg' : 'py-2 px-4 text-xs'
+                }`}
+                title="Rewind 10 seconds"
+              >
+                ⏪ -10s
+              </button>
+
+              <button
+                onClick={() => handleSkip(10)}
+                className={`font-bold text-white bg-slate-800 hover:bg-slate-700 active:bg-slate-655 rounded-lg transition-colors border border-slate-700 ${
+                  smartBoardMode ? 'py-3.5 px-6 text-lg' : 'py-2 px-4 text-xs'
+                }`}
+                title="Fast forward 10 seconds"
+              >
+                ⏩ +10s
+              </button>
+
+              <div className="h-6 w-[1px] bg-slate-850 mx-2" />
+
+              <span className={`text-slate-400 font-bold ${smartBoardMode ? 'text-lg' : 'text-xs'}`}>
+                Speed:
+              </span>
+
+              {[1, 1.25, 1.5, 2].map((speed) => (
+                <button
+                  key={speed}
+                  onClick={() => handleSpeedChange(speed)}
+                  className={`font-bold rounded-lg transition-all border ${
+                    playbackSpeed === speed
+                      ? 'bg-indigo-600 text-white border-indigo-700'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                  } ${smartBoardMode ? 'py-3.5 px-5 text-lg' : 'py-2 px-3 text-xs'}`}
+                >
+                  {speed}x
+                </button>
+              ))}
+            </div>
+          </div>
         ) : useOfficeViewer ? (
           /* PPT presentation via Office Live Viewer iframe */
           <iframe

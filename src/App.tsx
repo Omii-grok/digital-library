@@ -5,7 +5,7 @@ import { FileGrid } from './components/FileGrid';
 import { FileViewer } from './components/FileViewer';
 import { UploadModal } from './components/UploadModal';
 import { SettingsModal } from './components/SettingsModal';
-import type { Folder, FileItem, GithubConfig } from './types';
+import type { Folder, FileItem, GithubConfig, R2Config } from './types';
 import {
   loadLibrary,
   saveLibrary,
@@ -17,6 +17,7 @@ import {
   deleteFromGithub,
   fetchLibraryFromGithub,
   getFullFileUrl,
+  uploadToR2,
 } from './utils/db';
 import { FolderPlus, AlertCircle } from 'lucide-react';
 
@@ -25,6 +26,15 @@ const DEFAULT_GIT_CONFIG: GithubConfig = {
   owner: '',
   repo: '',
   branch: 'main',
+  enabled: false,
+};
+
+const DEFAULT_R2_CONFIG: R2Config = {
+  accountId: '',
+  accessKeyId: '',
+  secretAccessKey: '',
+  bucketName: '',
+  publicDomain: '',
   enabled: false,
 };
 
@@ -47,6 +57,7 @@ export default function App() {
 
   // GitHub integration states
   const [githubConfig, setGithubConfig] = useState<GithubConfig>(DEFAULT_GIT_CONFIG);
+  const [r2Config, setR2Config] = useState<R2Config>(DEFAULT_R2_CONFIG);
   const [isSyncing, setIsSyncing] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -84,6 +95,17 @@ export default function App() {
           console.error('Failed to parse github config', e);
         }
       }
+
+      // Load R2 config
+      const savedR2Config = localStorage.getItem('library_r2_config');
+      if (savedR2Config) {
+        try {
+          const parsed = JSON.parse(savedR2Config) as R2Config;
+          setR2Config(parsed);
+        } catch (e) {
+          console.error('Failed to parse R2 config', e);
+        }
+      }
     }
     init();
   }, []);
@@ -108,6 +130,11 @@ export default function App() {
         setIsSyncing(false);
       }
     }
+  };
+
+  const handleSaveR2Config = (newConfig: R2Config) => {
+    setR2Config(newConfig);
+    localStorage.setItem('library_r2_config', JSON.stringify(newConfig));
   };
 
   const handleManualSync = async () => {
@@ -212,7 +239,9 @@ export default function App() {
       // Delete files from GitHub if Sync is active
       if (githubConfig.enabled && githubConfig.token) {
         for (const file of filesToDelete) {
-          await deleteFromGithub(githubConfig, file.file, `Delete file: ${file.title}`);
+          if (!file.file.startsWith('http') && !file.file.startsWith('blob:')) {
+            await deleteFromGithub(githubConfig, `/public` + file.file, `Delete file: ${file.title}`);
+          }
         }
       }
       await pushDatabaseToGithub(updatedFolders, updatedFiles);
@@ -227,19 +256,33 @@ export default function App() {
   };
 
   // 3. File Actions
-  const handleUploadFile = async (title: string, folder: string, type: 'pdf' | 'ppt', file: File) => {
+  const handleUploadFile = async (title: string, folder: string, type: 'pdf' | 'ppt' | 'video', file: File) => {
     setIsSyncing(true);
     try {
       const timestamp = Date.now();
       const cleanFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const relativePath = type === 'pdf' 
-        ? `/public/files/${timestamp}-${cleanFilename}` 
-        : `/public/ppts/${timestamp}-${cleanFilename}`;
-      
-      const fileUrl = relativePath.replace('/public', ''); // Serve path relative to public folder in Vite
+      let fileUrl = '';
+      let isLocal = true;
 
-      // Save blob to IndexedDB
-      await saveFileBlob(fileUrl, file);
+      if (r2Config.enabled && r2Config.accountId && r2Config.accessKeyId) {
+        // Upload to Cloudflare R2
+        const folderPrefix = type === 'video' ? 'videos' : type === 'pdf' ? 'files' : 'ppts';
+        const r2Key = `${folderPrefix}/${timestamp}-${cleanFilename}`;
+        fileUrl = await uploadToR2(r2Config, file, r2Key);
+        isLocal = false;
+      } else {
+        // Standard local + git upload
+        const relativePath = type === 'video'
+          ? `/public/videos/${timestamp}-${cleanFilename}`
+          : type === 'pdf'
+          ? `/public/files/${timestamp}-${cleanFilename}`
+          : `/public/ppts/${timestamp}-${cleanFilename}`;
+        
+        fileUrl = relativePath.replace('/public', ''); // Serve path relative to public folder in Vite
+
+        // Save blob to IndexedDB
+        await saveFileBlob(fileUrl, file);
+      }
 
       // Create new file object
       const newFileItem: FileItem = {
@@ -247,7 +290,7 @@ export default function App() {
         folder,
         type,
         file: fileUrl,
-        isLocal: true,
+        isLocal,
         createdAt: new Date().toISOString(),
       };
 
@@ -257,9 +300,16 @@ export default function App() {
 
       // Commit to GitHub if enabled
       if (githubConfig.enabled && githubConfig.token) {
-        const fileBase64 = await blobToBase64(file);
-        // Write the actual PDF/PPT file to the repository (in public/files/ or public/ppts/)
-        await commitToGithub(githubConfig, relativePath, fileBase64, `Upload file: ${title}`);
+        if (!r2Config.enabled) {
+          // Only upload file to GitHub if R2 is NOT enabled
+          const relativePath = type === 'video'
+            ? `/public/videos/${timestamp}-${cleanFilename}`
+            : type === 'pdf'
+            ? `/public/files/${timestamp}-${cleanFilename}`
+            : `/public/ppts/${timestamp}-${cleanFilename}`;
+          const fileBase64 = await blobToBase64(file);
+          await commitToGithub(githubConfig, relativePath, fileBase64, `Upload file: ${title}`);
+        }
         // Update database lists
         await pushDatabaseToGithub(folders, updatedFiles);
       }
@@ -285,10 +335,11 @@ export default function App() {
     setIsSyncing(true);
     try {
       if (githubConfig.enabled && githubConfig.token) {
-        // Delete actual asset from repo
-        // Re-construct the full public path
-        const repoPath = `/public` + fileItem.file;
-        await deleteFromGithub(githubConfig, repoPath, `Delete file: ${fileItem.title}`);
+        // Delete actual asset from repo only if it was hosted on GitHub (not R2 or blob URLs)
+        if (!fileItem.file.startsWith('http') && !fileItem.file.startsWith('blob:')) {
+          const repoPath = `/public` + fileItem.file;
+          await deleteFromGithub(githubConfig, repoPath, `Delete file: ${fileItem.title}`);
+        }
         await pushDatabaseToGithub(folders, updatedFiles);
       }
     } catch (err) {
@@ -339,7 +390,8 @@ export default function App() {
 
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = file.title + (file.type === 'pdf' ? '.pdf' : '.pptx');
+    const extension = file.type === 'pdf' ? '.pdf' : file.type === 'ppt' ? '.pptx' : '.mp4';
+    a.download = file.title + extension;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -444,6 +496,8 @@ export default function App() {
         <SettingsModal
           config={githubConfig}
           onSaveConfig={handleSaveGithubConfig}
+          r2Config={r2Config}
+          onSaveR2Config={handleSaveR2Config}
           onClose={() => setIsSettingsOpen(false)}
           files={files}
           folders={folders}
