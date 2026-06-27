@@ -18,6 +18,7 @@ import {
   fetchLibraryFromGithub,
   getFullFileUrl,
   uploadToR2,
+  getCachedFileKeys,
 } from './utils/db';
 import { FolderPlus, AlertCircle } from 'lucide-react';
 
@@ -82,9 +83,15 @@ export default function App() {
             setIsSyncing(true);
             try {
               const remote = await fetchLibraryFromGithub(parsed);
+              const cachedKeys = await getCachedFileKeys();
+              const processedFiles = remote.files.map(f => ({
+                ...f,
+                isLocal: cachedKeys.includes(f.file)
+              }));
+
               setFolders(remote.folders);
-              setFiles(remote.files);
-              await saveLibrary(remote.folders, remote.files);
+              setFiles(processedFiles);
+              await saveLibrary(remote.folders, processedFiles);
             } catch (err) {
               console.warn('Failed to auto-sync with GitHub, using local cache:', err);
             } finally {
@@ -120,9 +127,15 @@ export default function App() {
       setErrorMsg(null);
       try {
         const remote = await fetchLibraryFromGithub(newConfig);
+        const cachedKeys = await getCachedFileKeys();
+        const processedFiles = remote.files.map(f => ({
+          ...f,
+          isLocal: cachedKeys.includes(f.file)
+        }));
+
         setFolders(remote.folders);
-        setFiles(remote.files);
-        await saveLibrary(remote.folders, remote.files);
+        setFiles(processedFiles);
+        await saveLibrary(remote.folders, processedFiles);
       } catch (err: any) {
         console.error(err);
         setErrorMsg('Sync config saved, but could not download lists from repository. Check token/repo names.');
@@ -140,9 +153,14 @@ export default function App() {
   const handleManualSync = async () => {
     if (!githubConfig.token) throw new Error('Token is required');
     const remote = await fetchLibraryFromGithub(githubConfig);
+    const cachedKeys = await getCachedFileKeys();
+    const processedFiles = remote.files.map(f => ({
+      ...f,
+      isLocal: cachedKeys.includes(f.file)
+    }));
     setFolders(remote.folders);
-    setFiles(remote.files);
-    await saveLibrary(remote.folders, remote.files);
+    setFiles(processedFiles);
+    await saveLibrary(remote.folders, processedFiles);
   };
 
   // Helper to commit DB lists to GitHub

@@ -93,6 +93,23 @@ export async function deleteFileBlob(path: string): Promise<void> {
   });
 }
 
+// Get all cached file keys in IndexedDB
+export async function getCachedFileKeys(): Promise<string[]> {
+  try {
+    const db = await initDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(BLOB_STORE, 'readonly');
+      const store = transaction.objectStore(BLOB_STORE);
+      const request = store.getAllKeys();
+      request.onsuccess = () => resolve(request.result as string[]);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) {
+    console.warn('IndexedDB not supported or accessible in this session:', e);
+    return [];
+  }
+}
+
 // Load current folders and files (either local storage, indexedDB, or seeds)
 export async function loadLibrary(): Promise<{ folders: Folder[]; files: FileItem[] }> {
   try {
@@ -109,13 +126,31 @@ export async function loadLibrary(): Promise<{ folders: Folder[]; files: FileIte
       await setState('files', files);
     }
 
+    // Automatically mark files as local if their blobs are cached in IndexedDB
+    const cachedKeys = await getCachedFileKeys();
+    files = files.map(file => ({
+      ...file,
+      isLocal: cachedKeys.includes(file.file)
+    }));
+
     return { folders, files };
   } catch (error) {
     console.error('Failed to load library from db, falling back to seed data:', error);
-    return {
-      folders: foldersSeed as Folder[],
-      files: filesSeed as FileItem[]
-    };
+    try {
+      const cachedKeys = await getCachedFileKeys();
+      return {
+        folders: foldersSeed as Folder[],
+        files: (filesSeed as FileItem[]).map(file => ({
+          ...file,
+          isLocal: cachedKeys.includes(file.file)
+        }))
+      };
+    } catch {
+      return {
+        folders: foldersSeed as Folder[],
+        files: filesSeed as FileItem[]
+      };
+    }
   }
 }
 
