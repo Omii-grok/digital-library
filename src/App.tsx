@@ -42,6 +42,23 @@ const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   enabled: true,
 };
 
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn('Failed to read from localStorage:', e);
+    return null;
+  }
+};
+
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn('Failed to write to localStorage:', e);
+  }
+};
+
 export default function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -77,7 +94,7 @@ export default function App() {
 
       // Load Supabase config
       let isSupabaseLoaded = false;
-      const savedSupabaseConfig = localStorage.getItem('library_supabase_config');
+      const savedSupabaseConfig = safeGetItem('library_supabase_config');
       if (savedSupabaseConfig) {
         try {
           const parsed = JSON.parse(savedSupabaseConfig) as SupabaseConfig;
@@ -110,7 +127,7 @@ export default function App() {
       }
 
       // Load Git config (only sync if Supabase did not load to avoid duplicate syncs)
-      const savedConfig = localStorage.getItem('library_github_config');
+      const savedConfig = safeGetItem('library_github_config');
       if (savedConfig) {
         try {
           const parsed = JSON.parse(savedConfig) as GithubConfig;
@@ -149,11 +166,7 @@ export default function App() {
   // Sync state handler
   const handleSaveGithubConfig = async (newConfig: GithubConfig) => {
     setGithubConfig(newConfig);
-    try {
-      localStorage.setItem('library_github_config', JSON.stringify(newConfig));
-    } catch (e) {
-      console.warn('Failed to save github config to localStorage:', e);
-    }
+    safeSetItem('library_github_config', JSON.stringify(newConfig));
 
     if (newConfig.enabled && newConfig.token && newConfig.owner && newConfig.repo) {
       setIsSyncing(true);
@@ -180,11 +193,7 @@ export default function App() {
 
   const handleSaveSupabaseConfig = async (newConfig: SupabaseConfig) => {
     setSupabaseConfig(newConfig);
-    try {
-      localStorage.setItem('library_supabase_config', JSON.stringify(newConfig));
-    } catch (e) {
-      console.warn('Failed to save supabase config to localStorage:', e);
-    }
+    safeSetItem('library_supabase_config', JSON.stringify(newConfig));
 
     // Upload current library metadata to Supabase Storage to initialize database in bucket
     if (newConfig.enabled && newConfig.projectRef && newConfig.apiKey) {
