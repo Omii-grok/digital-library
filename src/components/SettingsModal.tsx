@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { X, Cloud, Save, Download, Info, HardDrive, RefreshCw } from 'lucide-react';
-import type { GithubConfig, FileItem, R2Config } from '../types';
+import type { GithubConfig, FileItem, R2Config, SupabaseConfig } from '../types';
 
 interface SettingsModalProps {
   config: GithubConfig;
   onSaveConfig: (config: GithubConfig) => void;
   r2Config: R2Config;
   onSaveR2Config: (config: R2Config) => void;
+  supabaseConfig: SupabaseConfig;
+  onSaveSupabaseConfig: (config: SupabaseConfig) => void;
   onClose: () => void;
   files: FileItem[];
   folders: any[];
@@ -20,6 +22,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSaveConfig,
   r2Config,
   onSaveR2Config,
+  supabaseConfig,
+  onSaveSupabaseConfig,
   onClose,
   files,
   folders,
@@ -42,6 +46,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [r2BucketName, setR2BucketName] = useState(r2Config?.bucketName || '');
   const [r2PublicDomain, setR2PublicDomain] = useState(r2Config?.publicDomain || '');
   const [r2Enabled, setR2Enabled] = useState(r2Config?.enabled || false);
+
+  // Supabase Storage State
+  const [supabaseProjectRef, setSupabaseProjectRef] = useState(supabaseConfig?.projectRef || '');
+  const [supabaseAccessKeyId, setSupabaseAccessKeyId] = useState(supabaseConfig?.accessKeyId || '');
+  const [supabaseSecretAccessKey, setSupabaseSecretAccessKey] = useState(supabaseConfig?.secretAccessKey || '');
+  const [supabaseBucketName, setSupabaseBucketName] = useState(supabaseConfig?.bucketName || '');
+  const [supabaseEnabled, setSupabaseEnabled] = useState(supabaseConfig?.enabled || false);
 
   const localFiles = files.filter((f) => f.isLocal);
 
@@ -66,6 +77,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       bucketName: r2BucketName.trim(),
       publicDomain: r2PublicDomain.trim(),
       enabled: r2Enabled && !!r2AccountId,
+    });
+    onClose();
+  };
+
+  const handleSupabaseSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSaveSupabaseConfig({
+      projectRef: supabaseProjectRef.trim(),
+      accessKeyId: supabaseAccessKeyId.trim(),
+      secretAccessKey: supabaseSecretAccessKey.trim(),
+      bucketName: supabaseBucketName.trim(),
+      enabled: supabaseEnabled && !!supabaseProjectRef,
     });
     onClose();
   };
@@ -384,6 +407,119 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <Save className={smartBoardMode ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
                   Save Cloudflare settings
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          {/* Supabase Storage Sync Form */}
+          <div>
+            <div className="flex items-center gap-2 text-slate-800 mb-2">
+              <HardDrive className="text-emerald-600 w-5 h-5" />
+              <h3 className={`font-bold text-slate-700 font-display ${smartBoardMode ? 'text-xl' : 'text-sm'}`}>
+                Supabase Storage (Free Video & Large Document Hosting - No Card Required)
+              </h3>
+            </div>
+            
+            <div className={`bg-emerald-50/50 border border-emerald-100 text-emerald-900 rounded-xl flex gap-3 mb-4 leading-relaxed ${
+              smartBoardMode ? 'p-5 text-lg' : 'p-3.5 text-xs'
+            }`}>
+              <Info className={`flex-shrink-0 text-emerald-500 ${smartBoardMode ? 'w-6 h-6' : 'w-4.5 h-4.5'}`} />
+              <div>
+                <p className="font-semibold">Setup instructions (100% Free & No Credit Card):</p>
+                <ol className="list-decimal list-inside mt-1 space-y-1">
+                  <li>Create a free account on <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-emerald-700">supabase.com</a> and create a project.</li>
+                  <li>Go to <strong>Project Settings &rarr; Storage</strong> and generate <strong>S3 Access Keys</strong>.</li>
+                  <li>Go to <strong>Storage</strong> in the sidebar, create a new bucket, and make sure to make it <strong>Public</strong>.</li>
+                </ol>
+              </div>
+            </div>
+
+            <form onSubmit={handleSupabaseSave} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Supabase Project Reference ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. abcdefghijklmnopqrst"
+                  value={supabaseProjectRef}
+                  onChange={(e) => setSupabaseProjectRef(e.target.value)}
+                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
+                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
+                  }`}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Supabase Bucket Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. classroom-assets"
+                  value={supabaseBucketName}
+                  onChange={(e) => setSupabaseBucketName(e.target.value)}
+                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
+                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
+                  }`}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  S3 Access Key ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. access-key-id"
+                  value={supabaseAccessKeyId}
+                  onChange={(e) => setSupabaseAccessKeyId(e.target.value)}
+                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
+                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
+                  }`}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  S3 Secret Access Key
+                </label>
+                <input
+                  type="password"
+                  placeholder="e.g. secret-access-key"
+                  value={supabaseSecretAccessKey}
+                  onChange={(e) => setSupabaseSecretAccessKey(e.target.value)}
+                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
+                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
+                  }`}
+                />
+              </div>
+
+              <div className="md:col-span-2 flex items-center gap-2 py-2">
+                <input
+                  type="checkbox"
+                  id="enable-supabase-sync"
+                  checked={supabaseEnabled}
+                  onChange={(e) => setSupabaseEnabled(e.target.checked)}
+                  className="w-4.5 h-4.5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                />
+                <label htmlFor="enable-supabase-sync" className={`font-bold text-slate-700 ${smartBoardMode ? 'text-lg' : 'text-xs'}`}>
+                  Enable Supabase Storage (Direct browser upload for new files)
+                </label>
+              </div>
+
+              <div className="md:col-span-2 flex items-center gap-2 border-t border-slate-100 pt-4">
+                <button
+                  type="submit"
+                  className={`font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center gap-2 transition-all ${
+                    smartBoardMode ? 'py-4 px-6 text-lg' : 'py-2 px-4 text-xs'
+                  }`}
+                >
+                  <Save className={smartBoardMode ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
+                  Save Supabase Settings
                 </button>
               </div>
             </form>

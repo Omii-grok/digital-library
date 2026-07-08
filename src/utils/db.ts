@@ -1,6 +1,6 @@
 import foldersSeed from '../../data/folders.json';
 import filesSeed from '../../data/files.json';
-import type { Folder, FileItem, GithubConfig, R2Config } from '../types';
+import type { Folder, FileItem, GithubConfig, R2Config, SupabaseConfig } from '../types';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const DB_NAME = 'DigitalLibraryDB';
@@ -10,7 +10,7 @@ const STATE_STORE = 'library_state';
 
 // Helper to check if a file is a default seed file
 export const isDefaultFile = (fileItem: FileItem) => {
-  return !fileItem.isLocal && (fileItem.file.startsWith('/files/') || fileItem.file.startsWith('/ppts/'));
+  return (filesSeed as FileItem[]).some(seed => seed.file === fileItem.file);
 };
 
 // Initialize IndexedDB
@@ -352,5 +352,65 @@ export async function uploadToR2(
     : config.publicDomain;
 
   return `${domain}/${cleanKey}`;
+}
+
+// Download a file from GitHub as a Blob
+export async function downloadFileFromGithub(config: GithubConfig, filePath: string): Promise<Blob> {
+  const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+  // File in GitHub repository is at public/<filePath>
+  const fullPath = `public/${cleanPath}`;
+  const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${fullPath}?ref=${config.branch}`;
+  
+  const headers: HeadersInit = {
+    Accept: 'application/vnd.github.v3.raw',
+  };
+  if (config.token) {
+    headers['Authorization'] = `token ${config.token}`;
+  }
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch file from GitHub (status ${res.status}): ${res.statusText}`);
+  }
+  return res.blob();
+}
+
+// Download a file from a public URL as a Blob
+export async function downloadFileFromUrl(url: string): Promise<Blob> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch file from URL (status ${res.status}): ${res.statusText}`);
+  }
+  return res.blob();
+}
+
+// Supabase Storage Upload Handler (S3 Compatible)
+export async function uploadToSupabase(
+  config: SupabaseConfig,
+  file: File,
+  keyName: string
+): Promise<string> {
+  const s3 = new S3Client({
+    region: 'us-east-1',
+    endpoint: `https://${config.projectRef}.storage.supabase.co/storage/v1/s3`,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+    forcePathStyle: true,
+  });
+
+  const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
+
+  const command = new PutObjectCommand({
+    Bucket: config.bucketName,
+    Key: cleanKey,
+    Body: file,
+    ContentType: file.type,
+  });
+
+  await s3.send(command);
+
+  return `https://${config.projectRef}.supabase.co/storage/v1/object/public/${config.bucketName}/${cleanKey}`;
 }
 

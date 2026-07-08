@@ -5,7 +5,7 @@ import { FileGrid } from './components/FileGrid';
 import { FileViewer } from './components/FileViewer';
 import { UploadModal } from './components/UploadModal';
 import { SettingsModal } from './components/SettingsModal';
-import type { Folder, FileItem, GithubConfig, R2Config } from './types';
+import type { Folder, FileItem, GithubConfig, R2Config, SupabaseConfig } from './types';
 import {
   loadLibrary,
   saveLibrary,
@@ -19,8 +19,12 @@ import {
   getFullFileUrl,
   uploadToR2,
   getCachedFileKeys,
+  downloadFileFromGithub,
+  downloadFileFromUrl,
+  isDefaultFile,
+  uploadToSupabase,
 } from './utils/db';
-import { FolderPlus, AlertCircle } from 'lucide-react';
+import { FolderPlus, AlertCircle, Cloud } from 'lucide-react';
 
 const DEFAULT_GIT_CONFIG: GithubConfig = {
   token: '',
@@ -37,6 +41,14 @@ const DEFAULT_R2_CONFIG: R2Config = {
   bucketName: '',
   publicDomain: '',
   enabled: false,
+};
+
+const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
+  projectRef: '',
+  accessKeyId: '82b53b0ea96f318ab6f694c8c997504a',
+  secretAccessKey: '',
+  bucketName: 'classroom-assets',
+  enabled: true,
 };
 
 export default function App() {
@@ -59,9 +71,11 @@ export default function App() {
   // GitHub integration states
   const [githubConfig, setGithubConfig] = useState<GithubConfig>(DEFAULT_GIT_CONFIG);
   const [r2Config, setR2Config] = useState<R2Config>(DEFAULT_R2_CONFIG);
+  const [supabaseConfig, setSupabaseConfig] = useState<SupabaseConfig>(DEFAULT_SUPABASE_CONFIG);
   const [isSyncing, setIsSyncing] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loadingFileTitle, setLoadingFileTitle] = useState<string | null>(null);
 
   // 1. Initial Load
   useEffect(() => {
@@ -113,6 +127,17 @@ export default function App() {
           console.error('Failed to parse R2 config', e);
         }
       }
+
+      // Load Supabase config
+      const savedSupabaseConfig = localStorage.getItem('library_supabase_config');
+      if (savedSupabaseConfig) {
+        try {
+          const parsed = JSON.parse(savedSupabaseConfig) as SupabaseConfig;
+          setSupabaseConfig(parsed);
+        } catch (e) {
+          console.error('Failed to parse Supabase config', e);
+        }
+      }
     }
     init();
   }, []);
@@ -148,6 +173,11 @@ export default function App() {
   const handleSaveR2Config = (newConfig: R2Config) => {
     setR2Config(newConfig);
     localStorage.setItem('library_r2_config', JSON.stringify(newConfig));
+  };
+
+  const handleSaveSupabaseConfig = (newConfig: SupabaseConfig) => {
+    setSupabaseConfig(newConfig);
+    localStorage.setItem('library_supabase_config', JSON.stringify(newConfig));
   };
 
   const handleManualSync = async () => {
@@ -275,6 +305,12 @@ export default function App() {
 
   // 3. File Actions
   const handleUploadFile = async (title: string, folder: string, type: 'pdf' | 'ppt' | 'video', file: File) => {
+    // If GitHub is enabled but both Supabase and R2 are disabled, enforce 25MB file size limit for GitHub REST API commits
+    if (githubConfig.enabled && !r2Config.enabled && !supabaseConfig.enabled && file.size > 25 * 1024 * 1024) {
+      alert('GitHub REST API only supports files up to 25MB. For larger files (especially videos), please configure Cloudflare R2 or Supabase Storage in Library Settings.');
+      return;
+    }
+
     setIsSyncing(true);
     try {
       const timestamp = Date.now();
@@ -282,7 +318,13 @@ export default function App() {
       let fileUrl = '';
       let isLocal = true;
 
-      if (r2Config.enabled && r2Config.accountId && r2Config.accessKeyId) {
+      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.accessKeyId) {
+        // Upload to Supabase Storage
+        const folderPrefix = type === 'video' ? 'videos' : type === 'pdf' ? 'files' : 'ppts';
+        const key = `${folderPrefix}/${timestamp}-${cleanFilename}`;
+        fileUrl = await uploadToSupabase(supabaseConfig, file, key);
+        isLocal = false;
+      } else if (r2Config.enabled && r2Config.accountId && r2Config.accessKeyId) {
         // Upload to Cloudflare R2
         const folderPrefix = type === 'video' ? 'videos' : type === 'pdf' ? 'files' : 'ppts';
         const r2Key = `${folderPrefix}/${timestamp}-${cleanFilename}`;
@@ -318,8 +360,8 @@ export default function App() {
 
       // Commit to GitHub if enabled
       if (githubConfig.enabled && githubConfig.token) {
-        if (!r2Config.enabled) {
-          // Only upload file to GitHub if R2 is NOT enabled
+        if (!r2Config.enabled && !supabaseConfig.enabled) {
+          // Only upload file to GitHub if R2 and Supabase are NOT enabled
           const relativePath = type === 'video'
             ? `/public/videos/${timestamp}-${cleanFilename}`
             : type === 'pdf'
@@ -367,56 +409,83 @@ export default function App() {
     }
   };
 
-  const handleOpenFile = async (file: FileItem) => {
+  // Downloads and caches a file in IndexedDB if it is not yet local
+  const ensureFileCached = async (file: FileItem): Promise<string> => {
     if (file.isLocal) {
-      setIsSyncing(true);
-      try {
-        const blob = await getFileBlob(file.file);
-        if (blob) {
-          const blobUrl = URL.createObjectURL(blob);
-          setViewerFile({ ...file, file: blobUrl });
-        } else {
-          alert('Local file data not found in browser storage.');
-        }
-      } catch (err) {
-        console.error(err);
-        alert('Failed to load file.');
-      } finally {
-        setIsSyncing(false);
+      const blob = await getFileBlob(file.file);
+      if (blob) {
+        return URL.createObjectURL(blob);
       }
-    } else {
-      setViewerFile({ ...file, file: getFullFileUrl(file.file) });
+    }
+
+    if (isDefaultFile(file)) {
+      return getFullFileUrl(file.file);
+    }
+
+    // Resolve remote cloud files
+    setLoadingFileTitle(file.title);
+    try {
+      let blob: Blob;
+      if (file.file.startsWith('http')) {
+        // Fetch from public R2/cloud storage
+        blob = await downloadFileFromUrl(file.file);
+      } else if (githubConfig.enabled && githubConfig.token) {
+        // Fetch from GitHub
+        blob = await downloadFileFromGithub(githubConfig, file.file);
+      } else {
+        throw new Error('No cloud configuration active to download this remote file. Please check settings.');
+      }
+
+      // Save blob to IndexedDB
+      await saveFileBlob(file.file, blob);
+
+      // Update state and IndexedDB metadata
+      const updatedFiles = files.map((f) =>
+        f.file === file.file ? { ...f, isLocal: true } : f
+      );
+      setFiles(updatedFiles);
+      await saveLibrary(folders, updatedFiles);
+
+      const cachedBlob = await getFileBlob(file.file);
+      if (!cachedBlob) {
+        throw new Error('Blob could not be read back from IndexedDB after save.');
+      }
+      return URL.createObjectURL(cachedBlob);
+    } catch (err: any) {
+      console.error('Failed to download cloud file:', err);
+      throw new Error(`Cloud download failed: ${err.message || 'Check your network connectivity.'}`);
+    } finally {
+      setLoadingFileTitle(null);
+    }
+  };
+
+  const handleOpenFile = async (file: FileItem) => {
+    try {
+      const fileUrl = await ensureFileCached(file);
+      setViewerFile({ ...file, file: fileUrl });
+    } catch (err: any) {
+      alert(err.message || 'Failed to open file.');
     }
   };
 
   const handleDownloadFile = async (file: FileItem) => {
-    let downloadUrl = file.file;
-    let isTempUrl = false;
+    try {
+      const fileUrl = await ensureFileCached(file);
+      
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      const extension = file.type === 'pdf' ? '.pdf' : file.type === 'ppt' ? '.pptx' : '.mp4';
+      a.download = file.title + extension;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
 
-    if (file.isLocal) {
-      const blob = await getFileBlob(file.file);
-      if (blob) {
-        downloadUrl = URL.createObjectURL(blob);
-        isTempUrl = true;
-      } else {
-        alert('File content not found in browser.');
-        return;
+      if (fileUrl.startsWith('blob:')) {
+        // Delay revoking to allow browser download to start
+        setTimeout(() => URL.revokeObjectURL(fileUrl), 100);
       }
-    } else {
-      downloadUrl = getFullFileUrl(downloadUrl);
-    }
-
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    const extension = file.type === 'pdf' ? '.pdf' : file.type === 'ppt' ? '.pptx' : '.mp4';
-    a.download = file.title + extension;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    if (isTempUrl) {
-      // Delay revoking to allow browser download to start
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
+    } catch (err: any) {
+      alert(err.message || 'Failed to download file.');
     }
   };
 
@@ -479,6 +548,7 @@ export default function App() {
           onDeleteFile={handleDeleteFile}
           onOpenFile={handleOpenFile}
           onDownloadFile={handleDownloadFile}
+          isCloudEnabled={githubConfig.enabled || r2Config.enabled || supabaseConfig.enabled}
         />
       </div>
 
@@ -516,6 +586,8 @@ export default function App() {
           onSaveConfig={handleSaveGithubConfig}
           r2Config={r2Config}
           onSaveR2Config={handleSaveR2Config}
+          supabaseConfig={supabaseConfig}
+          onSaveSupabaseConfig={handleSaveSupabaseConfig}
           onClose={() => setIsSettingsOpen(false)}
           files={files}
           folders={folders}
@@ -579,6 +651,27 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Loading overlay for downloading files from cloud */}
+      {loadingFileTitle && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 md:p-8 max-w-sm w-full shadow-2xl border border-slate-100 flex flex-col items-center text-center gap-4">
+            <div className="relative flex items-center justify-center">
+              <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin" />
+              <Cloud className="absolute text-brand-600 w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-slate-800 text-lg">Fetching teaching material...</h3>
+              <p className="text-slate-500 text-xs mt-1 font-medium leading-relaxed">
+                We are downloading <strong className="text-slate-700">"{loadingFileTitle}"</strong> from the repository / cloud storage to this device.
+              </p>
+            </div>
+            <div className="w-full bg-slate-150 h-1.5 rounded-full overflow-hidden">
+              <div className="bg-brand-500 h-full w-2/3 animate-pulse rounded-full" />
+            </div>
           </div>
         </div>
       )}

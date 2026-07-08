@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Folder as FolderIcon, FileText, Download, Trash2, Edit3, LayoutGrid, List, FileClock, Presentation, Video } from 'lucide-react';
 import type { Folder, FileItem } from '../types';
+import { isDefaultFile } from '../utils/db';
 
 interface FileGridProps {
   folders: Folder[];
@@ -14,6 +15,7 @@ interface FileGridProps {
   onDeleteFile: (file: FileItem) => void;
   onOpenFile: (file: FileItem) => void;
   onDownloadFile: (file: FileItem) => void;
+  isCloudEnabled: boolean;
 }
 
 export const FileGrid: React.FC<FileGridProps> = ({
@@ -28,6 +30,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
   onDeleteFile,
   onOpenFile,
   onDownloadFile,
+  isCloudEnabled,
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
@@ -347,12 +350,30 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       }`}>
                         {file.folder}
                       </span>
-                      {file.isLocal && (
-                        <span className={`font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 ${
-                          smartBoardMode ? 'text-xs' : 'text-[9px]'
-                        }`}>
-                          Local
-                        </span>
+                      {isCloudEnabled ? (
+                        !isDefaultFile(file) && (
+                          file.isLocal ? (
+                            <span className={`font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-100 ${
+                              smartBoardMode ? 'text-xs' : 'text-[9px]'
+                            }`}>
+                              Synced
+                            </span>
+                          ) : (
+                            <span className={`font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100 ${
+                              smartBoardMode ? 'text-xs' : 'text-[9px]'
+                            }`}>
+                              Cloud
+                            </span>
+                          )
+                        )
+                      ) : (
+                        file.isLocal && (
+                          <span className={`font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 ${
+                            smartBoardMode ? 'text-xs' : 'text-[9px]'
+                          }`}>
+                            Local
+                          </span>
+                        )
                       )}
                     </div>
                   </div>

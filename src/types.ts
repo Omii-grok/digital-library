@@ -28,3 +28,11 @@ export interface R2Config {
   publicDomain: string;
   enabled: boolean;
 }
+
+export interface SupabaseConfig {
+  projectRef: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucketName: string;
+  enabled: boolean;
+}
