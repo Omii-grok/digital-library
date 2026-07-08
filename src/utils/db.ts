@@ -334,6 +334,7 @@ export async function uploadToR2(
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
   });
 
   const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
@@ -398,6 +399,7 @@ export async function uploadToSupabase(
       secretAccessKey: config.secretAccessKey,
     },
     forcePathStyle: true,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
   });
 
   const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
