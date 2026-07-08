@@ -149,7 +149,11 @@ export default function App() {
   // Sync state handler
   const handleSaveGithubConfig = async (newConfig: GithubConfig) => {
     setGithubConfig(newConfig);
-    localStorage.setItem('library_github_config', JSON.stringify(newConfig));
+    try {
+      localStorage.setItem('library_github_config', JSON.stringify(newConfig));
+    } catch (e) {
+      console.warn('Failed to save github config to localStorage:', e);
+    }
 
     if (newConfig.enabled && newConfig.token && newConfig.owner && newConfig.repo) {
       setIsSyncing(true);
@@ -176,7 +180,11 @@ export default function App() {
 
   const handleSaveSupabaseConfig = async (newConfig: SupabaseConfig) => {
     setSupabaseConfig(newConfig);
-    localStorage.setItem('library_supabase_config', JSON.stringify(newConfig));
+    try {
+      localStorage.setItem('library_supabase_config', JSON.stringify(newConfig));
+    } catch (e) {
+      console.warn('Failed to save supabase config to localStorage:', e);
+    }
 
     // Upload current library metadata to Supabase Storage to initialize database in bucket
     if (newConfig.enabled && newConfig.projectRef && newConfig.apiKey) {
