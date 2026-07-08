@@ -20,19 +20,9 @@ export interface GithubConfig {
   enabled: boolean;
 }
 
-export interface R2Config {
-  accountId: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  bucketName: string;
-  publicDomain: string;
-  enabled: boolean;
-}
-
 export interface SupabaseConfig {
   projectRef: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  apiKey: string;
   bucketName: string;
   enabled: boolean;
 }

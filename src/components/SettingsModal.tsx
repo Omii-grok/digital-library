@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { X, Cloud, Save, Download, Info, HardDrive, RefreshCw } from 'lucide-react';
-import type { GithubConfig, FileItem, R2Config, SupabaseConfig } from '../types';
+import type { GithubConfig, FileItem, SupabaseConfig } from '../types';
 
 interface SettingsModalProps {
   config: GithubConfig;
   onSaveConfig: (config: GithubConfig) => void;
-  r2Config: R2Config;
-  onSaveR2Config: (config: R2Config) => void;
   supabaseConfig: SupabaseConfig;
   onSaveSupabaseConfig: (config: SupabaseConfig) => void;
   onClose: () => void;
@@ -20,8 +18,6 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   config,
   onSaveConfig,
-  r2Config,
-  onSaveR2Config,
   supabaseConfig,
   onSaveSupabaseConfig,
   onClose,
@@ -39,18 +35,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSyncingNow, setIsSyncingNow] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
-  // Cloudflare R2 State
-  const [r2AccountId, setR2AccountId] = useState(r2Config?.accountId || '');
-  const [r2AccessKeyId, setR2AccessKeyId] = useState(r2Config?.accessKeyId || '');
-  const [r2SecretAccessKey, setR2SecretAccessKey] = useState(r2Config?.secretAccessKey || '');
-  const [r2BucketName, setR2BucketName] = useState(r2Config?.bucketName || '');
-  const [r2PublicDomain, setR2PublicDomain] = useState(r2Config?.publicDomain || '');
-  const [r2Enabled, setR2Enabled] = useState(r2Config?.enabled || false);
-
   // Supabase Storage State
   const [supabaseProjectRef, setSupabaseProjectRef] = useState(supabaseConfig?.projectRef || '');
-  const [supabaseAccessKeyId, setSupabaseAccessKeyId] = useState(supabaseConfig?.accessKeyId || '');
-  const [supabaseSecretAccessKey, setSupabaseSecretAccessKey] = useState(supabaseConfig?.secretAccessKey || '');
+  const [supabaseApiKey, setSupabaseApiKey] = useState(supabaseConfig?.apiKey || '');
   const [supabaseBucketName, setSupabaseBucketName] = useState(supabaseConfig?.bucketName || '');
   const [supabaseEnabled, setSupabaseEnabled] = useState(supabaseConfig?.enabled || false);
 
@@ -68,25 +55,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose();
   };
 
-  const handleR2Save = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSaveR2Config({
-      accountId: r2AccountId.trim(),
-      accessKeyId: r2AccessKeyId.trim(),
-      secretAccessKey: r2SecretAccessKey.trim(),
-      bucketName: r2BucketName.trim(),
-      publicDomain: r2PublicDomain.trim(),
-      enabled: r2Enabled && !!r2AccountId,
-    });
-    onClose();
-  };
-
   const handleSupabaseSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveSupabaseConfig({
       projectRef: supabaseProjectRef.trim(),
-      accessKeyId: supabaseAccessKeyId.trim(),
-      secretAccessKey: supabaseSecretAccessKey.trim(),
+      apiKey: supabaseApiKey.trim(),
       bucketName: supabaseBucketName.trim(),
       enabled: supabaseEnabled && !!supabaseProjectRef,
     });
@@ -287,133 +260,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <hr className="border-slate-100" />
 
-          {/* Cloudflare R2 Sync Form */}
-          <div>
-            <div className="flex items-center gap-2 text-slate-800 mb-2">
-              <HardDrive className="text-indigo-500 w-5 h-5" />
-              <h3 className={`font-bold text-slate-700 font-display ${smartBoardMode ? 'text-xl' : 'text-sm'}`}>
-                Cloudflare R2 Object Storage (Video & Large Document Hosting)
-              </h3>
-            </div>
-            
-            <div className={`bg-indigo-50/50 border border-indigo-100 text-indigo-900 rounded-xl flex gap-3 mb-4 leading-relaxed ${
-              smartBoardMode ? 'p-5 text-lg' : 'p-3.5 text-xs'
-            }`}>
-              <Info className={`flex-shrink-0 text-indigo-500 ${smartBoardMode ? 'w-6 h-6' : 'w-4.5 h-4.5'}`} />
-              <div>
-                <p className="font-semibold">Store PDF, PPT, and Video files for free:</p>
-                <p className="mt-1">
-                  Commiting massive video files directly to GitHub will fail (GitHub limit is 100MB per file).
-                  Configure Cloudflare R2 storage to upload files directly from your browser. R2 offers a 10GB free tier and zero download/egress bandwidth charges!
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleR2Save} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Cloudflare Account ID
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 842xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  value={r2AccountId}
-                  onChange={(e) => setR2AccountId(e.target.value)}
-                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
-                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
-                  }`}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  R2 Access Key ID
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. f01e0xxxxxxxxxxxxxxx"
-                  value={r2AccessKeyId}
-                  onChange={(e) => setR2AccessKeyId(e.target.value)}
-                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
-                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
-                  }`}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  R2 Secret Access Key
-                </label>
-                <input
-                  type="password"
-                  placeholder="e.g. 5d7e8xxxxxxxxxxxxxxxxxxxxxx"
-                  value={r2SecretAccessKey}
-                  onChange={(e) => setR2SecretAccessKey(e.target.value)}
-                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
-                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
-                  }`}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  R2 Bucket Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. classroom-assets"
-                  value={r2BucketName}
-                  onChange={(e) => setR2BucketName(e.target.value)}
-                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
-                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
-                  }`}
-                />
-              </div>
-
-              <div className="space-y-1 md:col-span-2">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  R2 Public URL / Domain URL
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. https://pub-xxxxxxxxxx.r2.dev"
-                  value={r2PublicDomain}
-                  onChange={(e) => setR2PublicDomain(e.target.value)}
-                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
-                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
-                  }`}
-                />
-              </div>
-
-              <div className="md:col-span-2 flex items-center gap-2 py-2">
-                <input
-                  type="checkbox"
-                  id="enable-r2-sync"
-                  checked={r2Enabled}
-                  onChange={(e) => setR2Enabled(e.target.checked)}
-                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                />
-                <label htmlFor="enable-r2-sync" className={`font-bold text-slate-700 ${smartBoardMode ? 'text-lg' : 'text-xs'}`}>
-                  Enable Cloudflare R2 Storage (Direct browser upload for new files)
-                </label>
-              </div>
-
-              <div className="md:col-span-2 flex items-center gap-2 border-t border-slate-100 pt-4">
-                <button
-                  type="submit"
-                  className={`font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-2 transition-all ${
-                    smartBoardMode ? 'py-4 px-6 text-lg' : 'py-2 px-4 text-xs'
-                  }`}
-                >
-                  <Save className={smartBoardMode ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
-                  Save Cloudflare settings
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <hr className="border-slate-100" />
-
           {/* Supabase Storage Sync Form */}
           <div>
             <div className="flex items-center gap-2 text-slate-800 mb-2">
@@ -431,8 +277,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="font-semibold">Setup instructions (100% Free & No Credit Card):</p>
                 <ol className="list-decimal list-inside mt-1 space-y-1">
                   <li>Create a free account on <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-emerald-700">supabase.com</a> and create a project.</li>
-                  <li>Go to <strong>Project Settings &rarr; Storage</strong> and generate <strong>S3 Access Keys</strong>.</li>
-                  <li>Go to <strong>Storage</strong> in the sidebar, create a new bucket, and make sure to make it <strong>Public</strong>.</li>
+                  <li>Go to <strong>Project Settings &rarr; API</strong>, copy the public <strong>anon</strong> key or private <strong>service_role</strong> key (recommended for admin access).</li>
+                  <li>Go to <strong>Storage</strong> in the sidebar, create a new bucket (e.g. <code>classroom-assets</code>), and make sure to make it <strong>Public</strong>.</li>
                 </ol>
               </div>
             </div>
@@ -450,6 +296,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
                     smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
                   }`}
+                  required
                 />
               </div>
 
@@ -465,36 +312,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
                     smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
                   }`}
+                  required
                 />
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1 md:col-span-2">
                 <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  S3 Access Key ID
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. access-key-id"
-                  value={supabaseAccessKeyId}
-                  onChange={(e) => setSupabaseAccessKeyId(e.target.value)}
-                  className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
-                    smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
-                  }`}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  S3 Secret Access Key
+                  Supabase API Key (anon key or service_role key)
                 </label>
                 <input
                   type="password"
-                  placeholder="e.g. secret-access-key"
-                  value={supabaseSecretAccessKey}
-                  onChange={(e) => setSupabaseSecretAccessKey(e.target.value)}
+                  placeholder="Paste your service_role or anon API key here..."
+                  value={supabaseApiKey}
+                  onChange={(e) => setSupabaseApiKey(e.target.value)}
                   className={`w-full border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 rounded-lg outline-none transition-all ${
                     smartBoardMode ? 'p-3.5 text-lg' : 'p-2 text-xs'
                   }`}
+                  required
                 />
               </div>
 

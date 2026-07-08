@@ -1,7 +1,6 @@
 import foldersSeed from '../../data/folders.json';
 import filesSeed from '../../data/files.json';
-import type { Folder, FileItem, GithubConfig, R2Config, SupabaseConfig } from '../types';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import type { Folder, FileItem, GithubConfig, SupabaseConfig } from '../types';
 
 const DB_NAME = 'DigitalLibraryDB';
 const DB_VERSION = 1;
@@ -321,39 +320,6 @@ export function getFullFileUrl(filePath: string): string {
   return `${base}${cleanPath}`;
 }
 
-// Cloudflare R2 Upload Handler
-export async function uploadToR2(
-  config: R2Config,
-  file: File,
-  keyName: string
-): Promise<string> {
-  const s3 = new S3Client({
-    region: 'auto', // R2 S3 compatibility requires region 'auto'
-    endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-    requestChecksumCalculation: 'WHEN_REQUIRED',
-  });
-
-  const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
-
-  const command = new PutObjectCommand({
-    Bucket: config.bucketName,
-    Key: cleanKey,
-    Body: file,
-    ContentType: file.type,
-  });
-
-  await s3.send(command);
-
-  const domain = config.publicDomain.endsWith('/')
-    ? config.publicDomain.slice(0, -1)
-    : config.publicDomain;
-
-  return `${domain}/${cleanKey}`;
-}
 
 // Download a file from GitHub as a Blob
 export async function downloadFileFromGithub(config: GithubConfig, filePath: string): Promise<Blob> {
@@ -385,34 +351,31 @@ export async function downloadFileFromUrl(url: string): Promise<Blob> {
   return res.blob();
 }
 
-// Supabase Storage Upload Handler (S3 Compatible)
+// Supabase Storage Upload Handler (REST API to prevent browser CORS issues)
 export async function uploadToSupabase(
   config: SupabaseConfig,
   file: File,
   keyName: string
 ): Promise<string> {
-  const s3 = new S3Client({
-    region: 'us-east-1',
-    endpoint: `https://${config.projectRef}.storage.supabase.co/storage/v1/s3`,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-    forcePathStyle: true,
-    requestChecksumCalculation: 'WHEN_REQUIRED',
-  });
-
   const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
+  const url = `https://${config.projectRef}.supabase.co/storage/v1/object/${config.bucketName}/${cleanKey}`;
 
-  const command = new PutObjectCommand({
-    Bucket: config.bucketName,
-    Key: cleanKey,
-    Body: file,
-    ContentType: file.type,
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'apikey': config.apiKey,
+      'Content-Type': file.type,
+    },
+    body: file,
   });
 
-  await s3.send(command);
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Supabase upload failed: ${errorText || res.statusText}`);
+  }
 
+  // Return the public URL for the public bucket asset in Supabase
   return `https://${config.projectRef}.supabase.co/storage/v1/object/public/${config.bucketName}/${cleanKey}`;
 }
 

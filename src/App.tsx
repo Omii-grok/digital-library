@@ -5,7 +5,7 @@ import { FileGrid } from './components/FileGrid';
 import { FileViewer } from './components/FileViewer';
 import { UploadModal } from './components/UploadModal';
 import { SettingsModal } from './components/SettingsModal';
-import type { Folder, FileItem, GithubConfig, R2Config, SupabaseConfig } from './types';
+import type { Folder, FileItem, GithubConfig, SupabaseConfig } from './types';
 import {
   loadLibrary,
   saveLibrary,
@@ -17,7 +17,6 @@ import {
   deleteFromGithub,
   fetchLibraryFromGithub,
   getFullFileUrl,
-  uploadToR2,
   getCachedFileKeys,
   downloadFileFromGithub,
   downloadFileFromUrl,
@@ -34,19 +33,9 @@ const DEFAULT_GIT_CONFIG: GithubConfig = {
   enabled: false,
 };
 
-const DEFAULT_R2_CONFIG: R2Config = {
-  accountId: '',
-  accessKeyId: '',
-  secretAccessKey: '',
-  bucketName: '',
-  publicDomain: '',
-  enabled: false,
-};
-
 const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   projectRef: '',
-  accessKeyId: '82b53b0ea96f318ab6f694c8c997504a',
-  secretAccessKey: '',
+  apiKey: '',
   bucketName: 'classroom-assets',
   enabled: true,
 };
@@ -70,7 +59,6 @@ export default function App() {
 
   // GitHub integration states
   const [githubConfig, setGithubConfig] = useState<GithubConfig>(DEFAULT_GIT_CONFIG);
-  const [r2Config, setR2Config] = useState<R2Config>(DEFAULT_R2_CONFIG);
   const [supabaseConfig, setSupabaseConfig] = useState<SupabaseConfig>(DEFAULT_SUPABASE_CONFIG);
   const [isSyncing, setIsSyncing] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -117,17 +105,6 @@ export default function App() {
         }
       }
 
-      // Load R2 config
-      const savedR2Config = localStorage.getItem('library_r2_config');
-      if (savedR2Config) {
-        try {
-          const parsed = JSON.parse(savedR2Config) as R2Config;
-          setR2Config(parsed);
-        } catch (e) {
-          console.error('Failed to parse R2 config', e);
-        }
-      }
-
       // Load Supabase config
       const savedSupabaseConfig = localStorage.getItem('library_supabase_config');
       if (savedSupabaseConfig) {
@@ -168,11 +145,6 @@ export default function App() {
         setIsSyncing(false);
       }
     }
-  };
-
-  const handleSaveR2Config = (newConfig: R2Config) => {
-    setR2Config(newConfig);
-    localStorage.setItem('library_r2_config', JSON.stringify(newConfig));
   };
 
   const handleSaveSupabaseConfig = (newConfig: SupabaseConfig) => {
@@ -305,9 +277,9 @@ export default function App() {
 
   // 3. File Actions
   const handleUploadFile = async (title: string, folder: string, type: 'pdf' | 'ppt' | 'video', file: File) => {
-    // If GitHub is enabled but both Supabase and R2 are disabled, enforce 25MB file size limit for GitHub REST API commits
-    if (githubConfig.enabled && !r2Config.enabled && !supabaseConfig.enabled && file.size > 25 * 1024 * 1024) {
-      alert('GitHub REST API only supports files up to 25MB. For larger files (especially videos), please configure Cloudflare R2 or Supabase Storage in Library Settings.');
+    // If GitHub is enabled but Supabase is disabled, enforce 25MB file size limit for GitHub REST API commits
+    if (githubConfig.enabled && !supabaseConfig.enabled && file.size > 25 * 1024 * 1024) {
+      alert('GitHub REST API only supports files up to 25MB. For larger files (especially videos), please configure Supabase Storage in Library Settings.');
       return;
     }
 
@@ -318,17 +290,11 @@ export default function App() {
       let fileUrl = '';
       let isLocal = true;
 
-      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.accessKeyId) {
+      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.apiKey) {
         // Upload to Supabase Storage
         const folderPrefix = type === 'video' ? 'videos' : type === 'pdf' ? 'files' : 'ppts';
         const key = `${folderPrefix}/${timestamp}-${cleanFilename}`;
         fileUrl = await uploadToSupabase(supabaseConfig, file, key);
-        isLocal = false;
-      } else if (r2Config.enabled && r2Config.accountId && r2Config.accessKeyId) {
-        // Upload to Cloudflare R2
-        const folderPrefix = type === 'video' ? 'videos' : type === 'pdf' ? 'files' : 'ppts';
-        const r2Key = `${folderPrefix}/${timestamp}-${cleanFilename}`;
-        fileUrl = await uploadToR2(r2Config, file, r2Key);
         isLocal = false;
       } else {
         // Standard local + git upload
@@ -360,8 +326,8 @@ export default function App() {
 
       // Commit to GitHub if enabled
       if (githubConfig.enabled && githubConfig.token) {
-        if (!r2Config.enabled && !supabaseConfig.enabled) {
-          // Only upload file to GitHub if R2 and Supabase are NOT enabled
+        if (!supabaseConfig.enabled) {
+          // Only upload file to GitHub if Supabase is NOT enabled
           const relativePath = type === 'video'
             ? `/public/videos/${timestamp}-${cleanFilename}`
             : type === 'pdf'
@@ -548,7 +514,7 @@ export default function App() {
           onDeleteFile={handleDeleteFile}
           onOpenFile={handleOpenFile}
           onDownloadFile={handleDownloadFile}
-          isCloudEnabled={githubConfig.enabled || r2Config.enabled || supabaseConfig.enabled}
+          isCloudEnabled={githubConfig.enabled || supabaseConfig.enabled}
         />
       </div>
 
@@ -584,8 +550,6 @@ export default function App() {
         <SettingsModal
           config={githubConfig}
           onSaveConfig={handleSaveGithubConfig}
-          r2Config={r2Config}
-          onSaveR2Config={handleSaveR2Config}
           supabaseConfig={supabaseConfig}
           onSaveSupabaseConfig={handleSaveSupabaseConfig}
           onClose={() => setIsSettingsOpen(false)}
