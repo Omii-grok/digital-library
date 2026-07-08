@@ -22,6 +22,8 @@ import {
   downloadFileFromUrl,
   isDefaultFile,
   uploadToSupabase,
+  fetchLibraryFromSupabase,
+  pushDatabaseToSupabase,
 } from './utils/db';
 import { FolderPlus, AlertCircle, Cloud } from 'lucide-react';
 
@@ -68,20 +70,53 @@ export default function App() {
   // 1. Initial Load
   useEffect(() => {
     async function init() {
-      // Load files and folders from local DB (IndexedDB/Seeds)
+      // Load local cache database first
       const data = await loadLibrary();
-      setFolders(data.folders);
-      setFiles(data.files);
+      let loadedFolders = data.folders;
+      let loadedFiles = data.files;
 
-      // Load Git config
+      // Load Supabase config
+      let isSupabaseLoaded = false;
+      const savedSupabaseConfig = localStorage.getItem('library_supabase_config');
+      if (savedSupabaseConfig) {
+        try {
+          const parsed = JSON.parse(savedSupabaseConfig) as SupabaseConfig;
+          setSupabaseConfig(parsed);
+
+          // Auto sync from Supabase if enabled
+          if (parsed.enabled && parsed.projectRef && parsed.apiKey) {
+            setIsSyncing(true);
+            try {
+              const remote = await fetchLibraryFromSupabase(parsed);
+              const cachedKeys = await getCachedFileKeys();
+              const processedFiles = remote.files.map(f => ({
+                ...f,
+                isLocal: cachedKeys.includes(f.file)
+              }));
+
+              loadedFolders = remote.folders;
+              loadedFiles = processedFiles;
+              await saveLibrary(remote.folders, processedFiles);
+              isSupabaseLoaded = true;
+            } catch (err) {
+              console.warn('Failed to auto-sync with Supabase, using local cache:', err);
+            } finally {
+              setIsSyncing(false);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse Supabase config', e);
+        }
+      }
+
+      // Load Git config (only sync if Supabase did not load to avoid duplicate syncs)
       const savedConfig = localStorage.getItem('library_github_config');
       if (savedConfig) {
         try {
           const parsed = JSON.parse(savedConfig) as GithubConfig;
           setGithubConfig(parsed);
           
-          // Auto sync from GitHub if enabled
-          if (parsed.enabled && parsed.token && parsed.owner && parsed.repo) {
+          if (!isSupabaseLoaded && parsed.enabled && parsed.token && parsed.owner && parsed.repo) {
             setIsSyncing(true);
             try {
               const remote = await fetchLibraryFromGithub(parsed);
@@ -91,8 +126,8 @@ export default function App() {
                 isLocal: cachedKeys.includes(f.file)
               }));
 
-              setFolders(remote.folders);
-              setFiles(processedFiles);
+              loadedFolders = remote.folders;
+              loadedFiles = processedFiles;
               await saveLibrary(remote.folders, processedFiles);
             } catch (err) {
               console.warn('Failed to auto-sync with GitHub, using local cache:', err);
@@ -105,16 +140,8 @@ export default function App() {
         }
       }
 
-      // Load Supabase config
-      const savedSupabaseConfig = localStorage.getItem('library_supabase_config');
-      if (savedSupabaseConfig) {
-        try {
-          const parsed = JSON.parse(savedSupabaseConfig) as SupabaseConfig;
-          setSupabaseConfig(parsed);
-        } catch (e) {
-          console.error('Failed to parse Supabase config', e);
-        }
-      }
+      setFolders(loadedFolders);
+      setFiles(loadedFiles);
     }
     init();
   }, []);
@@ -147,22 +174,47 @@ export default function App() {
     }
   };
 
-  const handleSaveSupabaseConfig = (newConfig: SupabaseConfig) => {
+  const handleSaveSupabaseConfig = async (newConfig: SupabaseConfig) => {
     setSupabaseConfig(newConfig);
     localStorage.setItem('library_supabase_config', JSON.stringify(newConfig));
+
+    // Upload current library metadata to Supabase Storage to initialize database in bucket
+    if (newConfig.enabled && newConfig.projectRef && newConfig.apiKey) {
+      setIsSyncing(true);
+      try {
+        await pushDatabaseToSupabase(newConfig, folders, files);
+      } catch (err) {
+        console.error('Failed to sync library database to Supabase Storage:', err);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
   };
 
   const handleManualSync = async () => {
-    if (!githubConfig.token) throw new Error('Token is required');
-    const remote = await fetchLibraryFromGithub(githubConfig);
-    const cachedKeys = await getCachedFileKeys();
-    const processedFiles = remote.files.map(f => ({
-      ...f,
-      isLocal: cachedKeys.includes(f.file)
-    }));
-    setFolders(remote.folders);
-    setFiles(processedFiles);
-    await saveLibrary(remote.folders, processedFiles);
+    if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.apiKey) {
+      const remote = await fetchLibraryFromSupabase(supabaseConfig);
+      const cachedKeys = await getCachedFileKeys();
+      const processedFiles = remote.files.map(f => ({
+        ...f,
+        isLocal: cachedKeys.includes(f.file)
+      }));
+      setFolders(remote.folders);
+      setFiles(processedFiles);
+      await saveLibrary(remote.folders, processedFiles);
+    } else if (githubConfig.token) {
+      const remote = await fetchLibraryFromGithub(githubConfig);
+      const cachedKeys = await getCachedFileKeys();
+      const processedFiles = remote.files.map(f => ({
+        ...f,
+        isLocal: cachedKeys.includes(f.file)
+      }));
+      setFolders(remote.folders);
+      setFiles(processedFiles);
+      await saveLibrary(remote.folders, processedFiles);
+    } else {
+      throw new Error('No sync configuration active.');
+    }
   };
 
   // Helper to commit DB lists to GitHub
@@ -197,10 +249,20 @@ export default function App() {
 
     setIsSyncing(true);
     try {
-      await pushDatabaseToGithub(updatedFolders, files);
-    } catch (err) {
-      console.error('GitHub Sync failed, saved locally:', err);
-      alert('Saved locally, but failed to upload to GitHub repo.');
+      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.apiKey) {
+        try {
+          await pushDatabaseToSupabase(supabaseConfig, updatedFolders, files);
+        } catch (sErr) {
+          console.error('Supabase metadata sync failed:', sErr);
+        }
+      }
+      if (githubConfig.enabled && githubConfig.token) {
+        try {
+          await pushDatabaseToGithub(updatedFolders, files);
+        } catch (gErr) {
+          console.error('GitHub metadata sync failed:', gErr);
+        }
+      }
     } finally {
       setIsSyncing(false);
       setNewFolderName('');
@@ -228,9 +290,20 @@ export default function App() {
 
     setIsSyncing(true);
     try {
-      await pushDatabaseToGithub(updatedFolders, updatedFiles);
-    } catch (err) {
-      console.error(err);
+      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.apiKey) {
+        try {
+          await pushDatabaseToSupabase(supabaseConfig, updatedFolders, updatedFiles);
+        } catch (sErr) {
+          console.error('Supabase database sync failed:', sErr);
+        }
+      }
+      if (githubConfig.enabled && githubConfig.token) {
+        try {
+          await pushDatabaseToGithub(updatedFolders, updatedFiles);
+        } catch (gErr) {
+          console.error('GitHub database sync failed:', gErr);
+        }
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -260,13 +333,30 @@ export default function App() {
       if (githubConfig.enabled && githubConfig.token) {
         for (const file of filesToDelete) {
           if (!file.file.startsWith('http') && !file.file.startsWith('blob:')) {
-            await deleteFromGithub(githubConfig, `/public` + file.file, `Delete file: ${file.title}`);
+            try {
+              await deleteFromGithub(githubConfig, `/public` + file.file, `Delete file: ${file.title}`);
+            } catch (err) {
+              console.error('GitHub file delete failed:', err);
+            }
           }
         }
       }
-      await pushDatabaseToGithub(updatedFolders, updatedFiles);
-    } catch (err) {
-      console.error(err);
+
+      // Sync database lists to cloud
+      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.apiKey) {
+        try {
+          await pushDatabaseToSupabase(supabaseConfig, updatedFolders, updatedFiles);
+        } catch (sErr) {
+          console.error('Supabase database sync failed:', sErr);
+        }
+      }
+      if (githubConfig.enabled && githubConfig.token) {
+        try {
+          await pushDatabaseToGithub(updatedFolders, updatedFiles);
+        } catch (gErr) {
+          console.error('GitHub database sync failed:', gErr);
+        }
+      }
     } finally {
       setIsSyncing(false);
       if (currentFolder === folderName) {
@@ -324,24 +414,35 @@ export default function App() {
       setFiles(updatedFiles);
       await saveLibrary(folders, updatedFiles);
 
-      // Commit to GitHub if enabled
+      // Commit to GitHub if enabled (only if Supabase is disabled)
+      if (githubConfig.enabled && githubConfig.token && !supabaseConfig.enabled) {
+        try {
+          const relativePath = type === 'video'
+            ? `/public/videos/${timestamp}-${cleanFilename}`
+            : type === 'pdf'
+            ? `/public/files/${timestamp}-${cleanFilename}`
+            : `/public/ppts/${timestamp}-${cleanFilename}`;
+          const fileBase64 = await blobToBase64(file);
+          await commitToGithub(githubConfig, relativePath, fileBase64, `Upload file: ${title}`);
+        } catch (gitError: any) {
+          console.error('GitHub file upload failed:', gitError);
+        }
+      }
+
+      // Sync database lists to cloud
+      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.apiKey) {
+        try {
+          await pushDatabaseToSupabase(supabaseConfig, folders, updatedFiles);
+        } catch (sErr) {
+          console.error('Supabase database sync failed:', sErr);
+          alert('Uploaded file, but failed to sync database metadata to Supabase.');
+        }
+      }
       if (githubConfig.enabled && githubConfig.token) {
         try {
-          if (!supabaseConfig.enabled) {
-            // Only upload file to GitHub if Supabase is NOT enabled
-            const relativePath = type === 'video'
-              ? `/public/videos/${timestamp}-${cleanFilename}`
-              : type === 'pdf'
-              ? `/public/files/${timestamp}-${cleanFilename}`
-              : `/public/ppts/${timestamp}-${cleanFilename}`;
-            const fileBase64 = await blobToBase64(file);
-            await commitToGithub(githubConfig, relativePath, fileBase64, `Upload file: ${title}`);
-          }
-          // Update database lists
           await pushDatabaseToGithub(folders, updatedFiles);
-        } catch (gitError: any) {
-          console.error('GitHub Sync failed, but file was successfully uploaded/saved:', gitError);
-          alert(`Uploaded successfully to Supabase, but failed to sync metadata to GitHub (${gitError.message || gitError}). Please check your GitHub Sync settings.`);
+        } catch (gErr) {
+          console.error('GitHub database sync failed:', gErr);
         }
       }
 
@@ -366,15 +467,32 @@ export default function App() {
     setIsSyncing(true);
     try {
       if (githubConfig.enabled && githubConfig.token) {
-        // Delete actual asset from repo only if it was hosted on GitHub (not R2 or blob URLs)
+        // Delete actual asset from repo only if it was hosted on GitHub
         if (!fileItem.file.startsWith('http') && !fileItem.file.startsWith('blob:')) {
-          const repoPath = `/public` + fileItem.file;
-          await deleteFromGithub(githubConfig, repoPath, `Delete file: ${fileItem.title}`);
+          try {
+            const repoPath = `/public` + fileItem.file;
+            await deleteFromGithub(githubConfig, repoPath, `Delete file: ${fileItem.title}`);
+          } catch (err) {
+            console.error('GitHub file delete failed:', err);
+          }
         }
-        await pushDatabaseToGithub(folders, updatedFiles);
       }
-    } catch (err) {
-      console.error('GitHub delete failed:', err);
+
+      // Sync database lists to cloud
+      if (supabaseConfig.enabled && supabaseConfig.projectRef && supabaseConfig.apiKey) {
+        try {
+          await pushDatabaseToSupabase(supabaseConfig, folders, updatedFiles);
+        } catch (sErr) {
+          console.error('Supabase database sync failed:', sErr);
+        }
+      }
+      if (githubConfig.enabled && githubConfig.token) {
+        try {
+          await pushDatabaseToGithub(folders, updatedFiles);
+        } catch (gErr) {
+          console.error('GitHub database sync failed:', gErr);
+        }
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -502,7 +620,7 @@ export default function App() {
         {isSyncing && !viewerFile && (
           <div className="absolute top-2 right-4 z-40 bg-white border border-slate-200 shadow-md py-1.5 px-3.5 rounded-full flex items-center gap-2 animate-fade-in text-xs font-bold text-slate-700">
             <div className="w-3.5 h-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-            <span>GitHub Sync active...</span>
+            <span>Cloud Sync active...</span>
           </div>
         )}
 
