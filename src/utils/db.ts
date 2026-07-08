@@ -357,8 +357,16 @@ export async function uploadToSupabase(
   file: File,
   keyName: string
 ): Promise<string> {
+  let cleanRef = config.projectRef.trim();
+  if (cleanRef.startsWith('http')) {
+    const match = cleanRef.match(/https?:\/\/([^.]+)\.supabase\.co/);
+    if (match && match[1]) {
+      cleanRef = match[1];
+    }
+  }
+
   const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
-  const url = `https://${config.projectRef}.supabase.co/storage/v1/object/${config.bucketName}/${cleanKey}`;
+  const url = `https://${cleanRef}.supabase.co/storage/v1/object/${config.bucketName}/${cleanKey}`;
 
   const res = await fetch(url, {
     method: 'POST',
