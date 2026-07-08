@@ -55,13 +55,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose();
   };
 
-  const handleSupabaseSave = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSupabaseSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    const cleanRef = supabaseProjectRef.trim();
+    const cleanBucket = supabaseBucketName.trim();
+    const cleanKey = supabaseApiKey.trim();
+
+    if (!cleanRef) {
+      alert('Please enter your Supabase Project Reference ID.');
+      return;
+    }
+    if (!cleanBucket) {
+      alert('Please enter your Supabase Bucket Name.');
+      return;
+    }
+    if (!cleanKey) {
+      alert('Please enter your Supabase API Key.');
+      return;
+    }
+
     onSaveSupabaseConfig({
-      projectRef: supabaseProjectRef.trim(),
-      apiKey: supabaseApiKey.trim(),
-      bucketName: supabaseBucketName.trim(),
-      enabled: supabaseEnabled && !!supabaseProjectRef,
+      projectRef: cleanRef,
+      apiKey: cleanKey,
+      bucketName: cleanBucket,
+      enabled: supabaseEnabled && !!cleanRef,
     });
     onClose();
   };
@@ -283,7 +301,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
 
-            <form onSubmit={handleSupabaseSave} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                   Supabase Project Reference ID
@@ -347,7 +365,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div className="md:col-span-2 flex items-center gap-2 border-t border-slate-100 pt-4">
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={() => handleSupabaseSave()}
                   className={`font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center gap-2 transition-all ${
                     smartBoardMode ? 'py-4 px-6 text-lg' : 'py-2 px-4 text-xs'
                   }`}
@@ -356,7 +375,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Save Supabase Settings
                 </button>
               </div>
-            </form>
+            </div>
           </div>
 
           <hr className="border-slate-100" />
