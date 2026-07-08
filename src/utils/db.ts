@@ -368,14 +368,19 @@ export async function uploadToSupabase(
   const cleanKey = keyName.startsWith('/') ? keyName.slice(1) : keyName;
   const url = `https://${cleanRef}.supabase.co/storage/v1/object/${config.bucketName}/${cleanKey}`;
 
+  // Use FormData to match the official Supabase SDK implementation exactly.
+  // Note: We do NOT set the Content-Type header; the browser will automatically set it with the correct multipart boundary.
+  const formData = new FormData();
+  formData.append('cacheControl', '3600');
+  formData.append('', file, file.name);
+
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${config.apiKey}`,
       'apikey': config.apiKey,
-      'Content-Type': file.type,
     },
-    body: file,
+    body: formData,
   });
 
   if (!res.ok) {
@@ -384,6 +389,5 @@ export async function uploadToSupabase(
   }
 
   // Return the public URL for the public bucket asset in Supabase
-  return `https://${config.projectRef}.supabase.co/storage/v1/object/public/${config.bucketName}/${cleanKey}`;
+  return `https://${cleanRef}.supabase.co/storage/v1/object/public/${config.bucketName}/${cleanKey}`;
 }
-
