@@ -379,6 +379,7 @@ export async function uploadToSupabase(
     headers: {
       'Authorization': `Bearer ${config.apiKey}`,
       'apikey': config.apiKey,
+      'x-upsert': 'true',
     },
     body: formData,
   });
@@ -390,4 +391,51 @@ export async function uploadToSupabase(
 
   // Return the public URL for the public bucket asset in Supabase
   return `https://${cleanRef}.supabase.co/storage/v1/object/public/${config.bucketName}/${cleanKey}`;
+}
+
+// Fetch files.json and folders.json lists directly from Supabase Storage bucket
+export async function fetchLibraryFromSupabase(
+  config: SupabaseConfig
+): Promise<{ folders: Folder[]; files: FileItem[] }> {
+  let cleanRef = config.projectRef.trim();
+  if (cleanRef.startsWith('http')) {
+    const match = cleanRef.match(/https?:\/\/([^.]+)\.supabase\.co/);
+    if (match && match[1]) {
+      cleanRef = match[1];
+    }
+  }
+
+  const filesUrl = `https://${cleanRef}.supabase.co/storage/v1/object/public/${config.bucketName}/database/files.json`;
+  const foldersUrl = `https://${cleanRef}.supabase.co/storage/v1/object/public/${config.bucketName}/database/folders.json`;
+
+  const cacheBuster = `?t=${Date.now()}`;
+  const [filesRes, foldersRes] = await Promise.all([
+    fetch(filesUrl + cacheBuster),
+    fetch(foldersUrl + cacheBuster),
+  ]);
+
+  if (!filesRes.ok || !foldersRes.ok) {
+    throw new Error('Database files not found on Supabase');
+  }
+
+  const files = (await filesRes.json()) as FileItem[];
+  const folders = (await foldersRes.json()) as Folder[];
+
+  return { folders, files };
+}
+
+// Upload current files.json and folders.json lists to Supabase Storage bucket
+export async function pushDatabaseToSupabase(
+  config: SupabaseConfig,
+  folders: Folder[],
+  files: FileItem[]
+): Promise<void> {
+  const foldersFile = new File([JSON.stringify(folders, null, 2)], 'folders.json', { type: 'application/json' });
+  const filesFile = new File([JSON.stringify(files, null, 2)], 'files.json', { type: 'application/json' });
+
+  // Upload database files to Supabase bucket
+  await Promise.all([
+    uploadToSupabase(config, foldersFile, 'database/folders.json'),
+    uploadToSupabase(config, filesFile, 'database/files.json'),
+  ]);
 }
