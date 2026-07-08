@@ -183,8 +183,10 @@ export default function App() {
       setIsSyncing(true);
       try {
         await pushDatabaseToSupabase(newConfig, folders, files);
-      } catch (err) {
+        alert('Supabase settings saved and cloud database initialized successfully!');
+      } catch (err: any) {
         console.error('Failed to sync library database to Supabase Storage:', err);
+        alert(`Supabase settings saved locally, but cloud database initialization failed: ${err.message || err}. Please double check your Project ID and API Key (make sure to use the service_role key).`);
       } finally {
         setIsSyncing(false);
       }
