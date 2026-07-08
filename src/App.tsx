@@ -326,18 +326,23 @@ export default function App() {
 
       // Commit to GitHub if enabled
       if (githubConfig.enabled && githubConfig.token) {
-        if (!supabaseConfig.enabled) {
-          // Only upload file to GitHub if Supabase is NOT enabled
-          const relativePath = type === 'video'
-            ? `/public/videos/${timestamp}-${cleanFilename}`
-            : type === 'pdf'
-            ? `/public/files/${timestamp}-${cleanFilename}`
-            : `/public/ppts/${timestamp}-${cleanFilename}`;
-          const fileBase64 = await blobToBase64(file);
-          await commitToGithub(githubConfig, relativePath, fileBase64, `Upload file: ${title}`);
+        try {
+          if (!supabaseConfig.enabled) {
+            // Only upload file to GitHub if Supabase is NOT enabled
+            const relativePath = type === 'video'
+              ? `/public/videos/${timestamp}-${cleanFilename}`
+              : type === 'pdf'
+              ? `/public/files/${timestamp}-${cleanFilename}`
+              : `/public/ppts/${timestamp}-${cleanFilename}`;
+            const fileBase64 = await blobToBase64(file);
+            await commitToGithub(githubConfig, relativePath, fileBase64, `Upload file: ${title}`);
+          }
+          // Update database lists
+          await pushDatabaseToGithub(folders, updatedFiles);
+        } catch (gitError: any) {
+          console.error('GitHub Sync failed, but file was successfully uploaded/saved:', gitError);
+          alert(`Uploaded successfully to Supabase, but failed to sync metadata to GitHub (${gitError.message || gitError}). Please check your GitHub Sync settings.`);
         }
-        // Update database lists
-        await pushDatabaseToGithub(folders, updatedFiles);
       }
 
     } catch (err: any) {
